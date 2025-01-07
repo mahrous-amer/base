@@ -45,7 +45,7 @@ async def test_event_publish(mock_redis, sample_event_data):
     """
     Test the publish method of the Event class.
     """
-    mock_redis.xadd = AsyncMock(return_value="event_id")
+    mock_redis.xadd = AsyncMock(return_value="event_id", side_effect=None)
     event = Event(**sample_event_data)
     event_id = await event.publish(mock_redis)
     expected_body = {
@@ -149,7 +149,7 @@ async def test_service_listen(service_instance, mock_redis):
     mock_redis.xinfo_groups = AsyncMock(return_value=[])
     mock_redis.xgroup_create = AsyncMock()
     mock_redis.xpending_range = AsyncMock(return_value=[])
-    mock_redis.xreadgroup = AsyncMock(side_effect=[
+    mock_redis.xreadgroup = AsyncMock(return_value=None, side_effect=[
         [["test_stream", [["id1", {b"data": b'{"stream": "test_stream", "action": "test_action", "data": {"key": "value"}}'}]]]],
         asyncio.CancelledError()  # Stop the loop after one iteration
     ])
@@ -203,4 +203,3 @@ async def test_service_graceful_shutdown(service_instance, mock_redis):
         mock_shutdown.return_value = None
         await service_instance.graceful_shutdown()
         mock_shutdown.assert_called_once()
-

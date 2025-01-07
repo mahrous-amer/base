@@ -33,7 +33,7 @@ async def test_service_process_and_ack_event():
     event = Event(stream="test_stream", action="test_action", data={"key": "value"})
     event.event_id = "12345"
 
-    with patch.object(service, "process_event", new=AsyncMock()) as mock_process_event:
+    with patch.object(service, "process_event", new=AsyncMock(return_value=None)) as mock_process_event:
         await service.process_and_ack_event(event)
         mock_process_event.assert_called_once_with(event)
         redis_mock.xack.assert_called_once_with("test_stream", "test_service", "12345")
@@ -59,7 +59,7 @@ async def test_service_claim_and_handle_pending_events():
     redis_mock.xread.return_value = [("test_stream", [("12345", {b"data": b'{"stream": "test_stream", "action": "test_action", "data": {"key": "value"}}'})])]
     service = Service(name="test_service", streams=["test_stream"], actions=["test_action"], redis_conn=redis_mock)
 
-    with patch.object(service, "process_and_ack_event", new=AsyncMock()) as mock_process_and_ack_event:
+    with patch.object(service, "process_and_ack_event", new=AsyncMock(return_value=None)) as mock_process_and_ack_event:
         await service.claim_and_handle_pending_events()
         mock_process_and_ack_event.assert_called_once()
 

@@ -8,7 +8,7 @@ from lib.event import Event
 
 @pytest.mark.asyncio
 async def test_event_publish():
-    redis_mock = AsyncMock()
+    redis_mock = AsyncMock(return_value=None)
     event = Event(stream="test_stream", action="test_action", data={"key": "value"})
     event_id = "12345"
     redis_mock.xadd.return_value = event_id
