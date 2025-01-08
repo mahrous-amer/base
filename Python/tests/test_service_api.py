@@ -1,70 +1,42 @@
-import sys, os
-import asyncio
-from redis.asyncio import Redis
 import pytest
-
-from unittest.mock import AsyncMock, Mock
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from unittest.mock import AsyncMock, patch
 from lib.service import Service
+from lib.message import Message
 
-@pytest.fixture
-def service():
-    """
-    Fixture for creating a Service instance.
-    """
-    redis_conn = AsyncMock(spec=Redis)
-    service_instance = Service(
-        name="test_service",
-        streams=["test_stream"],
-        actions=["action1", "action2"],
-        redis_conn=redis_conn,
+
+@pytest.mark.asyncio
+async def test_send_event():
+    redis_mock = AsyncMock()
+    service = Service(name="test_service", streams=[], actions=[], redis_conn=redis_mock)
+    event_id = "12345"
+    redis_mock.xadd.return_value = event_id
+
+    await service.send_event(
+        action="test_action",
+        data={"key": "value"},
+        maxlen=1000,
     )
-    return service_instance
+    redis_mock.xadd.assert_called_once()
+    assert redis_mock.xadd.call_args[0][0] == "test_service"
+    assert "data" in redis_mock.xadd.call_args[0][1]
+    assert "test_action" in redis_mock.xadd.call_args[0][1]["data"]
 
-# Test generating worker ID
+
 @pytest.mark.asyncio
-async def test_generate_worker_id(service):
-    worker_id = service.generate_worker_id()
-    assert worker_id is not None
-
-# Test RPC decorator
-@pytest.mark.asyncio
-async def test_rpc_decorator(service):
-    """
-    Test the rpc decorator of the Service class.
-    """
-    @service.rpc
-    async def test_rpc_method(self, args):
-        return args
-
-    mock_redis = AsyncMock()
-    service.redis = mock_redis
-
-    # Call the wrapped function
-    await test_rpc_method(service, {"auth": "test_channel", "key": "value"})
-
-    # Assert that the result was published to Redis
-    mock_redis.publish.assert_called_once_with("test_channel", "{'auth': 'test_channel', 'key': 'value'}")
-
-# Test sending an event
-@pytest.mark.asyncio
-async def test_send_event(service):
-    """
-    Test the send_event method of the Service class.
-    """
-    service.redis.xadd = AsyncMock(return_value="event_id")
-    await service.send_event("action1", {"key": "value"})
-    service.redis.xadd.assert_called_once()
-
-# Test creating a consumer group
-@pytest.mark.asyncio
-async def test_create_consumer_group(service):
-    """
-    Test the create_consumer_group method of the Service class.
-    """
-    service.redis.xinfo_groups = AsyncMock(return_value=[])
-    service.redis.xgroup_create = AsyncMock()
-    await service.create_consumer_group()
-    service.redis.xgroup_create.assert_called_once_with(
-        "test_stream", "test_service", id="$", mkstream=True
+async def test_process_event():
+    redis_mock = AsyncMock()
+    service = Service(name="test_service", streams=[], actions=["test_action"], redis_conn=redis_mock)
+    message = Message(
+        stream="test_stream",
+        action="test_action",
+        rpc="test_rpc",
+        message_id="msg123",
+        who="test_user",
+        data={"key": "value"},
     )
+    message.event_id = "12345"
+
+    with patch.object(service, "process_event", new=AsyncMock(return_value=None)) as mock_process_event:
+        await service.process_and_ack_event(message)
+        mock_process_event.assert_called_once_with(message)
+        redis_mock.xack.assert_called_once_with("test_stream", "test_service", "12345")

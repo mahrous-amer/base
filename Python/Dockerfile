@@ -2,9 +2,9 @@ FROM python:3.11
 
 ARG service_dir
 
-COPY ../base/Python/lib /app/lib/
+COPY ../Python/lib /app/lib/
 
-COPY ./base/Python/requirements.txt /app/lib/
+COPY ./Python/requirements.txt /app/lib/
 
 WORKDIR /app/lib
 

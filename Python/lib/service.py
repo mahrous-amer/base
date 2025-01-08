@@ -1,17 +1,17 @@
 import asyncio
 import logging
 import uuid
+
 from functools import wraps
 from typing import List, Dict, Optional, Any
 
-from lib.event import Event
+from lib.message import Message
 
 logging.basicConfig(level=logging.INFO)
 
-
 class Service:
     """
-    Base service class for microservices with Redis-based communication.
+    Base service class for microservices with Redis based communication.
     """
 
     pending_event_timeout: int = 30000
@@ -49,48 +49,62 @@ class Service:
                 raise RuntimeError("RPC function execution failed") from e
         return wrapper
 
-    async def send_event(self, action: str, data: Optional[Dict[str, Any]] = None) -> None:
+    async def send_event(self, action: str, data: Optional[Dict[str, Any]] = None, maxlen: Optional[int] = 1000) -> None:
         """
         Sends an event to a Redis stream.
         """
         data = data or {}
+        if "who" not in data:
+            data["who"] = "default_user"  # Provide a default value for 'who' if not present
+
         try:
-            event = Event(stream=self.name, action=action, data=data)
-            await event.publish(self.redis)
+            message = Message(stream=self.name, action=action, data=data)
+            message.validate_schema()
+            await message.publish(self.redis, maxlen=maxlen)
         except Exception as e:
             logging.error(f"Error sending event: {e}")
             raise RuntimeError("Failed to send event") from e
 
-    async def create_consumer_group(self) -> None:
+    async def create_consumer_group(self, mkstream: bool = True) -> None:
         """
         Creates a consumer group for each stream.
         """
         for stream in self.streams:
             try:
-                groups = await self.redis.xinfo_groups(stream)
+                logging.info(f"Checking consumer groups for stream: {stream}")
+                try:
+                    groups = await self.redis.xinfo_groups(stream)
+                except redis.exceptions.ResponseError as e:
+                    if "no such key" in str(e).lower():
+                        logging.info(f"Stream '{stream}' does not exist. Creating it.")
+                        await self.redis.xadd(stream, {"placeholder": "init"}, id="0-0")
+                        groups = await self.redis.xinfo_groups(stream)
+                    else:
+                        raise
                 if self.name not in [group['name'] for group in groups]:
-                    await self.redis.xgroup_create(stream, self.name, id="$", mkstream=True)
-            except Exception as e:
-                if "BUSYGROUP" not in str(e):
+                    logging.info(f"Creating consumer group '{self.name}' for stream: {stream}")
+                    await self.redis.xgroup_create(stream, self.name, id="$", mkstream=mkstream)
+            except redis.exceptions.ResponseError as e:
+                if "BUSYGROUP" not in str(e) and "NOGROUP" not in str(e):
                     logging.error(f"Error creating consumer group for {stream}: {e}")
                     raise RuntimeError("Failed to create consumer group") from e
 
-    async def process_and_ack_event(self, event: Event, retries: int = 3) -> None:
+    async def process_and_ack_event(self, message: Message, retries: int = 3, dead_letter_maxlen: Optional[int] = 1000) -> None:
         """
         Processes and acknowledges an event.
         """
-        if event.action in self.actions:
+        if message.action in self.actions:
             try:
                 for attempt in range(retries):
                     try:
-                        await self.process_event(event)
+                        await self.process_event(message)
                         break
                     except Exception as e:
                         logging.warning(f"Retry {attempt + 1}/{retries} for event {event.event_id}: {e}")
                         if attempt == retries - 1:
-                            await self.handle_dead_letter(event)
+                            await self.handle_dead_letter(message, maxlen=dead_letter_maxlen)
                             return
-                await self.redis.xack(event.stream, self.name, event.event_id)
+                await self.redis.xack(message.stream, self.name, message.event_id)
             except Exception as e:
                 logging.error(f"Error processing event: {e}")
                 raise RuntimeError("Failed to process and acknowledge event") from e
@@ -111,9 +125,17 @@ class Service:
                 )
                 for stream, messages in events:
                     for msg_id, raw_data in messages:
-                        serialized_data = raw_data[b"data"].decode("utf-8")
-                        event = Event.deserialize(serialized_data, format="json")
-                        await self.process_and_ack_event(event)
+                        try:
+                            serialized_data = raw_data[b"data"]
+                            message = Message.deserialize(serialized_data, format="json")
+                        except KeyError as e:
+                            logging.error(f"Missing 'data' key in message: {raw_data}")
+                            continue
+                        except Exception as e:
+                            logging.error(f"Error decoding message: {raw_data}, Error: {e}")
+                            continue
+                        message = Message.deserialize(serialized_data, format="json")
+                        await self.process_and_ack_event(message)
             except asyncio.CancelledError:
                 logging.info("Listener task cancelled.")
                 await self.graceful_shutdown()
@@ -122,14 +144,14 @@ class Service:
                 logging.error(f"Error in listener loop: {e}")
                 await asyncio.sleep(1)
 
-    async def handle_dead_letter(self, event: Event) -> None:
+    async def handle_dead_letter(self, message: Message, maxlen: Optional[int] = 1000) -> None:
         """
         Handles events that could not be processed after retries.
         """
         try:
-            dead_letter_stream = f"{event.stream}-dead-letter"
-            await self.redis.xadd(dead_letter_stream, {"data": event.serialize()}, maxlen=1000)
-            logging.error(f"Moved event {event.event_id} to dead-letter queue: {dead_letter_stream}")
+            dead_letter_stream = f"{message.stream}-dead-letter"
+            await self.redis.xadd(dead_letter_stream, {"data": message.serialize(format="json")}, maxlen=maxlen)
+            logging.error(f"Moved message {message.event_id} to dead-letter queue: {dead_letter_stream}")
         except Exception as e:
             logging.error(f"Failed to handle dead-letter event {event.event_id}: {e}")
 
@@ -144,13 +166,13 @@ class Service:
                     event_ids = [entry["message_id"] for entry in pending]
                     await self.redis.xclaim(stream, self.name, self.worker_id, self.pending_event_timeout, event_ids)
                     for msg_id in event_ids:
-                        event_data = await self.redis.xread(stream, {msg_id: 1})
+                        event_data = await self.redis.xread({stream: msg_id}, count=1)
                         if event_data:
                             try:
                                 logging.info(f"Raw event data structure: {event_data}")
                                 serialized_data = event_data[0][1][0][1][b"data"].decode("utf-8")
-                                event = Event.deserialize(serialized_data, format="json")
-                                await self.process_and_ack_event(event, retries=retries)
+                                message = Message.deserialize(serialized_data, format="json")
+                                await self.process_and_ack_event(message, retries=retries)
                             except Exception as e:
                                 logging.error(f"Failed to process pending event {msg_id}: {e}")
             except Exception as e:
@@ -177,25 +199,25 @@ class Service:
         Performs a graceful shutdown of the service.
         """
         try:
-            await self.pubsub.close()
+            await self.pubsub.aclose()
             logging.info("Graceful shutdown completed.")
         except Exception as e:
             logging.error(f"Error during graceful shutdown: {e}")
             raise RuntimeError("Failed to perform graceful shutdown") from e
 
-    async def process_event(self, event: Event) -> None:
+    async def process_event(self, message: Message) -> None:
         """
         Processes an event based on the action.
         """
-        if event.action in self.rpcs:
+        if message.action in self.rpcs:
             try:
-                method = getattr(self, event.action, None)
+                method = getattr(self, message.action, None)
                 if method:
-                    await method(event.data)
+                    await method(message.data)
                 else:
-                    logging.warning(f"No RPC method found for action: {event.action}")
+                    logging.warning(f"No RPC method found for action: {message.action}")
             except Exception as e:
                 logging.error(f"Error processing RPC action: {e}")
                 raise RuntimeError("Failed to process RPC action") from e
         else:
-            logging.info(f"Unhandled event action: {event.action}")
+            logging.info(f"Unhandled event action: {message.action}")
