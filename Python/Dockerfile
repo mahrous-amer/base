@@ -11,7 +11,8 @@ WORKDIR /app/lib
 RUN echo "installing apt and pip deps" \
 			&& apt-get -y -q update \
 			&& DEBIAN_FRONTEND=noninteractive \
-			&& apt-get -y -q --no-install-recommends install $(cat aptfile) \
+			&& apt-get install -y -q --no-install-recommends $(cat aptfile || echo "") \
+			&& rm -rf /var/lib/apt/lists/* \
 			&& pip install --upgrade pip \
 			&& echo $(pwd && ls) && pip install -r requirements.txt
 
@@ -23,7 +24,8 @@ RUN if [ -n "$service_dir" ] ; then \
 			echo "installing apt and pip deps" \
 			&& apt-get -y -q update \
 			&& DEBIAN_FRONTEND=noninteractive \
-			&& apt-get -y -q --no-install-recommends install $(cat aptfile) \
+			&& apt-get install -y -q --no-install-recommends $(cat aptfile || echo "") \
+			&& rm -rf /var/lib/apt/lists/* \
 			&& pip install -r requirements.txt; \
 		fi
 

@@ -8,7 +8,6 @@ from typing import Optional, Dict, Any, Union
 
 logging.basicConfig(level=logging.INFO)
 
-
 class Message:
     """
     Represents a message that can be either an event or an RPC.
@@ -199,7 +198,7 @@ class Message:
         pubsub = await redis_conn.pubsub(ignore_subscribe_messages=True)  # RESP3 compatibility
         await pubsub.subscribe(channel_name)
         try:
-            timeout = 5  # seconds
+            timeout = 5
             start_time = asyncio.get_event_loop().time()
             while asyncio.get_event_loop().time() - start_time < timeout:
                 message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1)

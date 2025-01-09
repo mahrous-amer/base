@@ -6,19 +6,23 @@ This repository provides a foundational implementation for inter-service communi
 
 ## Protocol Overview
 
-### Event Class
+### Message Class
 
-The `Event` class represents a message or action to be published or consumed via Redis. It provides the following features:
+The `Message` class represents a message that can be either an event or an RPC. It provides the following features:
 - **Serialization/Deserialization**: Supports JSON and MsgPack formats.
-- **Publishing**: Sends events to Redis streams.
-- **Hashing**: Generates unique hashes for event data.
+- **Publishing**: Sends messages to Redis streams.
+- **Hashing**: Generates SHA-256 hashes for message data.
 - **Receiving**: Listens for messages on Redis Pub/Sub channels.
+- **Validation**: Ensures the message schema is consistent.
+- **Encoding/Decoding**: Encodes and decodes fields like `args`, `response`, `stash`, and `trace`.
 
-#### Event Lifecycle
-1. **Creation**: An event is instantiated with a stream, action, and data.
-2. **Serialization**: The event is serialized into the desired format (e.g., JSON).
-3. **Publishing**: The serialized event is published to a Redis stream.
-4. **Consumption**: Services consume the event, deserialize it, and process the action.
+#### Message Lifecycle
+1. **Creation**: A message is instantiated with attributes like `stream`, `action`, and `data`.
+2. **Serialization**: The message is serialized into the desired format (e.g., JSON or MsgPack).
+3. **Publishing**: The serialized message is published to a Redis stream.
+4. **Consumption**: Services consume the message, deserialize it, and process the action.
+5. **Hashing**: A unique hash is generated for the message data and stored in Redis.
+6. **Receiving**: Messages are received from Redis Pub/Sub channels and deserialized.
 
 ---
 
@@ -47,7 +51,7 @@ Below is a high-level diagram `Service` class:
 ```plaintext
 +-------------------+       +-------------------+
 |                   |       |                   |
-|   Producer        |       |   Consumer        |
+|     Producer      |       |     Consumer      |
 |                   |       |                   |
 +-------------------+       +-------------------+
           |                         ^
@@ -64,10 +68,10 @@ Below is a high-level diagram `Service` class:
 
 ## Usage
 
-### Event Class Example
+### Message Class Example
 
 ```python
-from lib.event import Event
+from lib.message import Message
 import asyncio
 import redis.asyncio as redis
 
@@ -100,12 +104,33 @@ asyncio.run(main())
 
 ---
 
+## Python Directory Overview
+
+The `Python` directory contains the core implementation of the repository. It is structured as follows:
+
+- **`lib/`**: Contains the main library files:
+  - `message.py`: Handles message related operations.
+  - `service.py`: Implements the service logic for event processing.
+- **`tests/`**: Includes unit tests for the library:
+  - `test_message.py`: Tests for `message.py`.
+  - `test_service.py`: Tests for `service.py`.
+  - `test_integration.py`: Integration tests for the overall functionality.
+- **Configuration Files**:
+  - `requirements.txt`: Lists the Python dependencies.
+  - `pytest.ini`: Configuration for the pytest framework.
+
+This directory is designed to provide a modular and testable implementation of the repository's functionality.
+
+---
+
 ## Running Tests
 
 To run the unit tests, use the following command:
 
 ```bash
-pytest -v
+cd Python && \
+docker build -t python-base-test -f Dockerfile.test . && \
+docker run --rm -it --entrypoint /bin/bash -v ./:/app/ python-base-test
 ```
 
 ---
