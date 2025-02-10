@@ -1,6 +1,11 @@
 # Base
 
-This repository provides a foundational implementation for inter-service communication using Redis. It includes two key components: the `Event` class and the `Service` class, which together enable scalable and reliable communication in distributed systems.
+This repository provides a foundational implementation for inter-service communication using Redis.
+
+It includes two key components:
+1. `Message` class
+2. `Service` class
+Together they enable scalable and reliable communication in distributed systems.
 
 ---
 
@@ -8,7 +13,8 @@ This repository provides a foundational implementation for inter-service communi
 
 ### Message Class
 
-The `Message` class represents a message that can be either an event or an RPC. It provides the following features:
+The `Message` class represents a message that can be either an event or an RPC.
+It provides the following features:
 - **Serialization/Deserialization**: Supports JSON and MsgPack formats.
 - **Publishing**: Sends messages to Redis streams.
 - **Hashing**: Generates SHA-256 hashes for message data.
@@ -77,8 +83,8 @@ import redis.asyncio as redis
 
 async def main():
     redis_conn = redis.Redis()
-    event = Event(stream="test_stream", action="test_action", data={"key": "value"})
-    await event.publish(redis_conn)
+    message = Message(stream="test_stream", action="test_action", data={"key": "value"})
+    await message.publish(redis_conn)
 
 asyncio.run(main())
 ```
