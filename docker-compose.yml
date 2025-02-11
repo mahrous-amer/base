@@ -1,0 +1,40 @@
+version: '3.9'
+
+services:
+  rpc_server:
+    build:
+      context: ./
+      dockerfile: ./Python/Dockerfile
+      args:
+        service_dir: "./services/rpc_server"
+    container_name: rpc_server
+    restart: unless-stopped
+    volumes:
+      - ./services/rpc_server/bin:/app/bin
+      - ./Python/lib:/app/lib
+    environment:
+      LOG_LEVEL: "DEBUG"
+      RPC_COMPATIBILITY: "Myriad::RPC::Message"
+
+  event_emitter:
+    build:
+      context: ./
+      dockerfile: ./Python/Dockerfile
+      args:
+        service_dir: "./services/event_emitter"
+    container_name: event_emitter
+    restart: unless-stopped
+    volumes:
+      - ./services/event_emitter/bin:/app/bin
+      - ./Python/lib:/app/lib
+    environment:
+      LOG_LEVEL: "DEBUG"
+      RPC_COMPATIBILITY: "Myriad::RPC::Message"
+
+  redis:
+    container_name: redis
+    image: redis:alpine
+    restart: always
+    deploy:
+      mode: replicated
+      replicas: 1
