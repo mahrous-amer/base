@@ -55,8 +55,7 @@ class Service:
         """
         data = data or {}
         if "who" not in data:
-            data["who"] = "default_user"  # Provide a default value for 'who' if not present
-
+            data["who"] = self.name 
         try:
             message = Message(stream=self.name, action=action, data=data)
             message.validate_schema()

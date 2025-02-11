@@ -12,7 +12,7 @@ async def main():
     # Initialize the Service
     service = Service(
         name="rpc_server",
-        streams=["example_stream"],
+        streams=["example_stream", "rpc_server"],
         actions=["example_action"],
         redis_conn=redis_conn,
     )
