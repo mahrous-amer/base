@@ -18,26 +18,26 @@ class Message:
         stream: str = "",
         action: str = "",
         rpc: str = "",
+        who: Optional[str] = None,
         message_id: Optional[str] = None,
         transport_id: Optional[str] = None,
-        who: Optional[str] = None,
         deadline: Optional[int] = None,
-        data: Optional[Dict[str, Any]] = None,
-        stash: Optional[Dict[str, Any]] = None,
+        args: Optional[Dict[str, Any]] = None,
         response: Optional[Dict[str, Any]] = None,
+        stash: Optional[Dict[str, Any]] = None,
         trace: Optional[Dict[str, Any]] = None,
     ):
-        self.stream = stream
-        self.action = action
-        self.rpc = rpc
-        self.message_id = message_id or self._generate_message_id()
+        self.stream       = stream
+        self.action       = action
+        self.rpc          = rpc
+        self.who          = who or None
+        self.message_id   = message_id or self._generate_message_id()
         self.transport_id = transport_id
-        self.who = who or data.get("who") if data else None
-        self.deadline = deadline or int(asyncio.get_event_loop().time() + 30)
-        self.args = data or {}
-        self.stash = stash or {}
-        self.response = response or {}
-        self.trace = trace or {}
+        self.deadline     = deadline or int(asyncio.get_event_loop().time() + 30)
+        self.args         = args or {}
+        self.response     = response or {}
+        self.stash        = stash or {}
+        self.trace        = trace or {}
 
     @staticmethod
     def _generate_message_id() -> str:
@@ -51,7 +51,6 @@ class Message:
         """
         Validates the message schema to ensure consistency.
         """
-        # Check required fields based on whether it's an RPC or an event
         if self.rpc:
             required_fields = ["rpc", "message_id", "who", "deadline", "args"]
         else:
@@ -69,13 +68,13 @@ class Message:
             "stream": self.stream,
             "action": self.action,
             "rpc": self.rpc,
+            "who": self.who,
             "message_id": self.message_id,
             "transport_id": self.transport_id,
-            "who": self.who,
             "deadline": self.deadline,
             "args": self.args,
-            "stash": self.stash,
             "response": self.response,
+            "stash": self.stash,
             "trace": self.trace,
         }
 
@@ -88,13 +87,13 @@ class Message:
             stream=data.get("stream", ""),
             action=data.get("action", ""),
             rpc=data.get("rpc", ""),
+            who=data.get("who", ""),
             message_id=data.get("message_id", ""),
             transport_id=data.get("transport_id"),
-            who=data.get("who", ""),
             deadline=data.get("deadline", int(asyncio.get_event_loop().time()) + 30),
-            data=data.get("args", {}),
-            stash=data.get("stash", {}),
+            args=data.get("args", {}),
             response=data.get("response", {}),
+            stash=data.get("stash", {}),
             trace=data.get("trace", {}),
         )
 
@@ -203,7 +202,7 @@ class Message:
             while asyncio.get_event_loop().time() - start_time < timeout:
                 message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1)
                 if message and message.get("type") == "message":
-                    data = message["data"].decode("utf-8")
+                    data = message["args"].decode("utf-8")
                     return Message.from_json(data)
             raise TimeoutError(f"No message received on channel {channel_name} within {timeout} seconds")
         except TimeoutError as e:

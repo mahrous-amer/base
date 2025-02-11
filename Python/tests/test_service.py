@@ -54,7 +54,7 @@ async def test_service_process_and_ack_event():
         rpc="test_rpc",
         message_id="msg123",
         who="test_user",
-        data={"key": "value"},
+        args={"key": "value"},
     )
     message.event_id = "12345"
 
@@ -74,7 +74,7 @@ async def test_service_handle_dead_letter():
         rpc="test_rpc",
         message_id="msg123",
         who="test_user",
-        data={"key": "value"},
+        args={"key": "value"},
     )
     message.event_id = "12345"
 
@@ -88,7 +88,7 @@ async def test_service_handle_dead_letter():
 async def test_service_claim_and_handle_pending_events():
     redis_mock = AsyncMock()
     redis_mock.xpending_range.return_value = [{"message_id": "12345"}]
-    redis_mock.xread.return_value = [("test_stream", [("12345", {b"data": b'{"stream": "test_stream", "action": "test_action", "rpc": "test_rpc", "data": {"key": "value"}}'})])]
+    redis_mock.xread.return_value = [("test_stream", [("12345", {b"args": b'{"stream": "test_stream", "action": "test_action", "rpc": "test_rpc", "args": {"key": "value"}}'})])]
     service = Service(name="test_service", streams=["test_stream"], actions=["test_action"], redis_conn=redis_mock)
 
     with patch.object(service, "process_and_ack_event", new=AsyncMock(return_value=None)) as mock_process_and_ack_event:

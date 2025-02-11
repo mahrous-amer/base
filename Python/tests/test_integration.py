@@ -16,9 +16,10 @@ async def test_event_publish():
         rpc="test_rpc",
         message_id="msg123",
         who="test_user",
-        data={"key1": "value1", "key2": "value2"},
+        args={"key1": "value1", "key2": "value2"},
     )
-    redis_mock.xadd.return_value = "event_id"
+    redis_mock.xadd = AsyncMock(return_value="event_id")
+
 
     result = await message.publish(redis_mock, maxlen=1000)
     assert result == "event_id"
@@ -40,7 +41,7 @@ async def test_event_generate_hash():
         rpc="test_rpc",
         message_id="msg123",
         who="test_user",
-        data={"key1": "value1", "key2": "value2"},
+        args={"key1": "value1", "key2": "value2"},
     )
     unique_hash = await message.generate_hash(redis_mock)
 
@@ -52,19 +53,22 @@ async def test_event_generate_hash():
 @pytest.mark.asyncio
 async def test_service_send_event():
     redis_mock = AsyncMock()
+    redis_mock.xadd = AsyncMock(return_value="event_id")
+
     service = Service(name="test_service", streams=[], actions=[], redis_conn=redis_mock)
-    redis_mock.xadd.return_value = "event_id"
 
     await service.send_event(
         action="test_action",
         data={"key": "value"},
     )
-    redis_mock.xadd.assert_called_once()
 
+    redis_mock.xadd.assert_called_once()
 
 @pytest.mark.asyncio
 async def test_service_process_and_ack_event():
     redis_mock = AsyncMock()
+    redis_mock.xack = AsyncMock(return_value="ack_id")
+
     service = Service(name="test_service", streams=[], actions=["test_action"], redis_conn=redis_mock)
     message = Message(
         stream="test_stream",
@@ -72,7 +76,7 @@ async def test_service_process_and_ack_event():
         rpc="test_rpc",
         message_id="msg123",
         who="test_user",
-        data={"key": "value"},
+        args={"key": "value"},
     )
     message.event_id = "event_id"
 

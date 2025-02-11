@@ -21,7 +21,7 @@ async def main():
     # Emit an event
     async def emit_event():
         try:
-            event = Message(stream="example_stream", action="example_action", data={"key": "value", "who": "me"})
+            event = Message(stream="example_stream", action="example_action", args={"key": "value", "who": "me"}, who=service.name)
             await event.publish(redis_conn)
             logging.info("Event emitted.")
         except Exception as e:
@@ -30,7 +30,7 @@ async def main():
     # Make an RPC call
     async def make_rpc_call():
         try:
-            rpc = Message(stream="rpc_server", action="example_action", data={"param": "test", "who": "me"})
+            rpc = Message(stream="rpc_server", action="example_action", args={"param": "test", "who": "me"}, who=service.name, rpc=1)
             await rpc.publish(redis_conn)
             logging.info("RPC call made.")
         except Exception as e:

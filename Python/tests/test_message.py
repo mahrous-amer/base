@@ -14,10 +14,9 @@ async def test_publish_to_stream():
         action="test_action",
         rpc="test_rpc",
         who="user123",
-        data={"key": "value"}
+        args={"key": "value"}
     )
     redis_mock.xadd.return_value = "event_id"
-
     result = await message.publish(redis_mock, format="json", maxlen=1000)
     assert result == "event_id"
     redis_mock.xadd.assert_called_once_with(
@@ -34,7 +33,7 @@ async def test_generate_hash():
         rpc="rpc_method",
         message_id="msg_id",
         who="user",
-        data={"key": "value"}
+        args={"key": "value"}
     )
     hash_value = await message.generate_hash(redis_mock)
     assert hash_value is not None
@@ -50,7 +49,7 @@ def test_serialize_json():
         rpc="rpc_method",
         message_id="msg_id",
         who="user",
-        data={"key": "value"}
+        args={"key": "value"}
     )
     json_data = message.serialize(format="json")
     assert json.loads(json_data) == {
@@ -73,7 +72,7 @@ def test_serialize_msgpack():
         rpc="rpc_method",
         message_id="msg_id",
         who="user",
-        data={"key": "value"}
+        args={"key": "value"}
     )
     packed_data = message.serialize(format="msgpack")
     deserialized_data = msgpack.unpackb(packed_data, raw=False)
@@ -131,7 +130,7 @@ def test_deserialize_msgpack():
 
 
 def test_invalid_serialization_format():
-    message = Message(rpc="rpc_method", message_id="msg_id", who="user", data={"key": "value"})
+    message = Message(rpc="rpc_method", message_id="msg_id", who="user", args={"key": "value"})
     with pytest.raises(ValueError, match="Unsupported serialization format"):
         message.serialize(format="invalid_format")
 
@@ -148,6 +147,7 @@ async def test_passing_deadline():
         rpc="rpc_method",
         message_id="msg_id",
         who="user",
+        args={"key": "value"},
         deadline=int(asyncio.get_event_loop().time()) - 1,  # Past deadline
     )
     assert message.passed_deadline() is True
@@ -156,6 +156,7 @@ async def test_passing_deadline():
         rpc="rpc_method",
         message_id="msg_id",
         who="user",
+        args={"key": "value"},
         deadline=int(asyncio.get_event_loop().time()) + 10,  # Future deadline
     )
     assert future_message.passed_deadline() is False

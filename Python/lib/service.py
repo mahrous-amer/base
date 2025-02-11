@@ -54,10 +54,14 @@ class Service:
         Sends an event to a Redis stream.
         """
         data = data or {}
-        if "who" not in data:
-            data["who"] = self.name 
         try:
-            message = Message(stream=self.name, action=action, data=data)
+            message = Message(
+                stream=self.name,
+                action=action,
+                args=data,
+                rpc = None,
+                who = self.name
+            )
             message.validate_schema()
             await message.publish(self.redis, maxlen=maxlen)
         except Exception as e:
@@ -99,7 +103,7 @@ class Service:
                         await self.process_event(message)
                         break
                     except Exception as e:
-                        logging.warning(f"Retry {attempt + 1}/{retries} for event {event.event_id}: {e}")
+                        logging.warning(f"Retry {attempt + 1}/{retries} for event {message.event_id}: {e}")
                         if attempt == retries - 1:
                             await self.handle_dead_letter(message, maxlen=dead_letter_maxlen)
                             return
@@ -133,7 +137,6 @@ class Service:
                         except Exception as e:
                             logging.error(f"Error decoding message: {raw_data}, Error: {e}")
                             continue
-                        message = Message.deserialize(serialized_data, format="json")
                         await self.process_and_ack_event(message)
             except asyncio.CancelledError:
                 logging.info("Listener task cancelled.")
@@ -152,7 +155,7 @@ class Service:
             await self.redis.xadd(dead_letter_stream, {"data": message.serialize(format="json")}, maxlen=maxlen)
             logging.error(f"Moved message {message.event_id} to dead-letter queue: {dead_letter_stream}")
         except Exception as e:
-            logging.error(f"Failed to handle dead-letter event {event.event_id}: {e}")
+            logging.error(f"Failed to handle dead-letter event {message.event_id}: {e}")
 
     async def claim_and_handle_pending_events(self, retries: int = 3) -> None:
         """
@@ -169,7 +172,7 @@ class Service:
                         if event_data:
                             try:
                                 logging.info(f"Raw event data structure: {event_data}")
-                                serialized_data = event_data[0][1][0][1][b"data"].decode("utf-8")
+                                serialized_data = event_data[0][1][0][1][b"args"].decode("utf-8")
                                 message = Message.deserialize(serialized_data, format="json")
                                 await self.process_and_ack_event(message, retries=retries)
                             except Exception as e:

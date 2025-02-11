@@ -32,7 +32,7 @@ async def test_process_event():
         rpc="test_rpc",
         message_id="msg123",
         who="test_user",
-        data={"key": "value"},
+        args={"key": "value"},
     )
     message.event_id = "12345"
 
